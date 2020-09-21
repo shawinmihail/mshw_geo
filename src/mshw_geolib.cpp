@@ -18,6 +18,7 @@ GeoEllipsoid::GeoEllipsoid(double a_, double f_inv_):
     b = a * (1.0 - f);
     e = sqrt(1.0 - b * b / a / a);
     e_2 = e * e;
+    hmin = pow(e, 12) / 4.0;
 }
 
 GeoEllipsoid::GeoEllipsoid(const GeoEllipsoid& gE_) : a(gE_.a), f_inv(gE_.f_inv)
@@ -32,7 +33,7 @@ Geo::Geo(GeoEllipsoid gE) : _gE(gE)
     
 }
 
-int Geo::Wgs2Ecef(double lat, double lon, double alt, double& x, double& y, double& z)
+void Geo::Wgs2Ecef(double lat, double lon, double alt, double& x, double& y, double& z)
 {
     double sLat = sin(lat);
     double cLat = cos(lat);
@@ -42,8 +43,6 @@ int Geo::Wgs2Ecef(double lat, double lon, double alt, double& x, double& y, doub
     x = (_gE.a / xi + alt) * cLat * cLon;
     y = (_gE.a / xi + alt) * cLat * sLon;
     z = (_gE.a * (1.0 - _gE.e_2) / xi + alt) * sLat;
-    
-    return 0;
 }
 
 int Geo::Ecef2Wgs(double x, double y, double z, double& lat, double& lon, double& alt)
@@ -58,7 +57,10 @@ int Geo::Ecef2Wgs(double x, double y, double z, double& lat, double& lon, double
     double p = (m + n - 4.0 * l * l) / 6.0;
     double G = m * n * l * l;
     double H = 2.0 * p * p * p + G;
-    // if TODO
+    if (H < _gE.hmin)
+    {
+        return -1;
+    }
     double C = pow(H + G + 2.0 * sqrt(H * G), 1.0 / 3.0) / pow(2, (1.0 / 3.0));
     double i = -(2.0 * l * l + m + n) / 2.0;
     double P = p * p;
@@ -82,22 +84,36 @@ int Geo::Ecef2Wgs(double x, double y, double z, double& lat, double& lon, double
 }
                     
     
-int Geo::Wgs2Enu(double lat, double lon, double alt, double& x, double& y, double& z)
+void Geo::Wgs2Enu(/*ref point*/double lat0, double lon0, double alt0, /*wgs point*/double lat, double lon, double alt, /*out enu point*/ double& e, double& n, double& u)
     {
+        double x0 = 0;
+        double y0 = 0;
+        double z0 = 0;
+        Wgs2Ecef(lat0, lon0, alt0, x0, y0, z0);
+        
         double x = 0;
         double y = 0;
         double z = 0;
         Wgs2Ecef(lat, lon, alt, x, y, z);
         
-        return 0;
+        Ecef2Enu(lat0, lon0, alt0, x - x0, y - y0, z - z0,  e, n, u);
     }
     
-    int Enu2Wgs(double lat, double lon, double h, double& x, double& y, double& z)
+    int Geo::Enu2Wgs(/*ref point*/double lat0, double lon0, double alt0, /*enu point*/double e, double n, double u, /*out wgs point*/ double& lat, double& lon, double& alt)
     {
-        return 0;
+        double x0 = 0;
+        double y0 = 0;
+        double z0 = 0;
+        Wgs2Ecef(lat0, lon0, alt0, x0, y0, z0);
+        
+        double x = 0;
+        double y = 0;
+        double z = 0;
+        Enu2Ecef(lat0, lon0, alt0, e, n, u, x, y, z);
+        return Ecef2Wgs(x0 + x, y0 + y, z0 + z, lat, lon, alt);
     }
     
-    void Geo::rotateEcef2Enu(/*ref point*/double lat0, double lon0, double alt0, /*ecef point*/double x, double y, double z,  /*out enu point*/double& e, double& n, double& u)
+    void Geo::Ecef2Enu(/*ref point*/double lat0, double lon0, double alt0, /*ecef point*/double x, double y, double z,  /*out enu point*/double& e, double& n, double& u)
     {
         double sLat = sin(lat0);
         double cLat = cos(lat0);
@@ -108,23 +124,16 @@ int Geo::Wgs2Enu(double lat, double lon, double alt, double& x, double& y, doubl
         n = -sLat * cLon * x - sLat * sLon * y + cLat * z;
         u =  cLat * cLon * x + cLat * sLon * y + sLat * z;
         
-        u = u - alt0;
     }
     
-    void Geo::rotateEnu2Ecef(/*ref point*/double lat0, double lon0, double alt0, /*enu point*/double e, double n, double u,  /*out ecef point*/double& x, double& y, double& z)
+    void Geo::Enu2Ecef(/*ref point*/double lat0, double lon0, double alt0, /*enu point*/double e, double n, double u,  /*out ecef point*/double& x, double& y, double& z)
     {
         double sLat = sin(lat0);
         double cLat = cos(lat0);
         double sLon = sin(lon0);
         double cLon = cos(lon0);
-        
-        z = z + alt0;
                 
-        x = -sLon * x - sLat * cLon * y + cLat * cLon * z;
-        y =  cLon * x - sLat * sLon * y + cLat * sLon * z;
-        z = y * cLat + z * sLat;
+        x = -sLon * e - sLat * cLon * n + cLat * cLon * u;
+        y =  cLon * e - sLat * sLon * n + cLat * sLon * u;
+        z = n * cLat + u * sLat;
     }
-
-/* Consts */
- 
-const struct GeoEllipsoid WGS84 = {6378137.0, 298.257223563};
