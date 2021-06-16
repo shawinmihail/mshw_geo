@@ -27,9 +27,8 @@ struct GeoEllipsoid
         hmin = pow(e, 12) / 4.0;
     };
     
-    GeoEllipsoid(const GeoEllipsoid& gE_) : a(gE_.a), f_inv(gE_.f_inv)
+    GeoEllipsoid(const GeoEllipsoid& gE_) :  GeoEllipsoid(gE_.a, gE_.f_inv)
     {
-        GeoEllipsoid(gE_.a, gE_.f_inv);
     };
 };   
 
